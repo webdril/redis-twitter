@@ -27,7 +27,7 @@ app.use(
             httpOnly: false,
             secure: false,
         },
-        secret: 'bM80SARMxlq4fiWhulfNSeUFURWLTY8vyf',
+        secret: 'bM80SARMxlq4fiWhulfNSeUFURWgfdsajk',
     })
 )
 
@@ -36,9 +36,19 @@ app.use(
 
 
 
-app.get('/', (req, res) => res.render('index'))
+app.get('/', (req, res) => {
+    if (req.session.userid) {
+        res.render('dashboard')
+    }  else {
+        res.render("login")
+    }
+})
 
-// Create  post endpoint
+
+
+
+
+// Login/Register endpoint
 app.post('/', (req, res) => {
     const { username, password } = req.body
 
@@ -49,30 +59,49 @@ app.post('/', (req, res) => {
         return
     }
 
-    console.log(req.body, username, password)
+    const saveSessionAndRenderDashboard = userid => {
+        req.session.userid = userid
+        req.session.save()
+        res.render('dashboard')
+    }
     
+    const handleSignup = (username, password) => {
+          // user does not  exist, sign up procedure should start
+          client.incr('userid', async (err, userid) => {
+            client.hset('users', username, userid)
+            const saltRounds = 10
+            const hash = await bcrypt.hash(password, saltRounds)
+            client.hset(`user:${userid}`, 'hash', hash, 'username', username )
+            saveSessionAndRenderDashboard(userid)
+        })
+    }
+
+    const handleLogin = (userid, password) => {
+         // user exists, login procedure
+         client.hget(`user:${userid}`, 'hash', async (err, hash) => {
+            const result = await bcrypt.compare(password, hash)
+            if  (result) {
+              //   that is password is ok
+              saveSessionAndRenderDashboard(userid)
+            }  else {
+              //   Wrong password
+              res.render('error', {
+                  message: 'Incorrect password',
+              })
+              return
+            }
+          })
+    }
+
+
     client.hget('users', username, (err, userid) => {
         if (!userid) {
-            // user does not  exist, sign up procedure should start
-            client.incr('userid', async (err, userid) => {
-                client.hset('users', username, userid)
-                const saltRounds = 10
-                const hash = await bcrypt.hash(password, saltRounds)
-                client.hset(`user:${userid}`, 'hash', hash, 'username', username )
-            })
-        }   else {
-            // user exists, login procedure
-            client.hget(`user:${userid}`, 'hash', async (err, hash) => {
-              const result = await bcrypt.compare(password, hash)
-              if  (result) {
-                //   that is password is ok
-              }  else {
-                //   Wrong password
-              }
-            })
+            handleSignup(username, password)           
+        } else {
+            // Lgin Procedure
+            handleLogin(userid, password)
         }
     })
-    res.end()
 
 })
 app.listen(3000, () => console.log('Server ready'))
