@@ -44,6 +44,14 @@ app.get('/', (req, res) => {
     }
 })
 
+app.get("/post", (req, res) => {
+    if (req.session.userid) {
+        res.render("post")
+    }   else {
+        res.render("login")
+    }
+})
+
 
 
 
